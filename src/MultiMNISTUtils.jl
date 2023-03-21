@@ -91,9 +91,6 @@ function make_new_imgs(
     @assert all(rlb .>= llb)
     rng = seed!(31415)      # reproducibly choose RHS image
     
-    ind_left = 1:len
-    ind_right = randperm(rng, len)
-	
     new_imgs = similar(fdata)
     new_targets = similar(tdata, (2, len))
 	
@@ -112,8 +109,8 @@ function make_new_imgs(
         __rub = _rlb .+ d
     end
     
-    for ileft = ind_left
-		iright = ind_right[ileft]    # choose random index for right feature img
+    for ileft = 1:len
+		iright = rand(rng, 1:len)    # choose random index for right feature img
 		img_left = fdata[:,:,ileft]
 		img_right = fdata[:,:,iright]
 		img_new = zeros(eltype(img_left), tmpsize[1], tmpsize[2])
