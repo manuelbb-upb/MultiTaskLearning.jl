@@ -61,45 +61,30 @@ function to_idx_bytes(arr)
     return reshape(reinterpret(UInt8, hton.(arr)), :)
 end
 
-function global_coordinates(lb; offset=(27,27), LB = (1,1), UB = (36, 36))
-    _lb = max.(LB, lb)
-    _ub = min.(
-        UB,
-        (_lb[1]+offset[1]-(_lb[1]-lb[1]), _lb[2]+offset[2]-(_lb[2]-lb[2]))
-    )
+function global_coordinates(
+    lb;
+    local_img_size=(28, 28), new_img_size=(36, 36)
+)
+    #=
+        (LB[1], UB[2]) ----- (UB[1], UB[2])
+                |                   |
+                |                   |
+        (LB[1], LB[2]) ----- (UB[1], LB[2])
+    =#
+    LB = (1,1)
+    UB = new_img_size
+    ub = lb .+ local_img_size .- 1
+    _lb = min.(UB, max.(LB, lb))
+    _ub = min.(UB, max.(LB,ub))
     _w = _ub .- _lb .+ 1
     return _lb, _ub, _w
 end
 
-function make_new_imgs(
-    len, fdata, tdata; 
-    llb::Union{Symbol, Nothing, NTuple{2,<:Integer}}=nothing,
-    rlb::Union{Symbol, Nothing, NTuple{2,<:Integer}}=nothing,
-    tmpsize::Union{Nothing, NTuple{2,<:Integer}}=nothing,
-)
-    # llb = (1,1), rlb=(7,7), tmpsize=(36,36) is used by Sener & Koltun
-    if isnothing(llb) || llb isa Symbol
-        llb = (1,1)
-    end
-    if isnothing(rlb) || rlb isa Symbol
-        rlb = (7,7)
-    end
-    if isnothing(tmpsize) || tmpsize isa Symbol
-        tmpsize = (36,36)
-    end
-
-    @assert all(rlb .>= llb)
-    rng = seed!(31415)      # reproducibly choose RHS image
-    
-    new_imgs = similar(fdata)
-    new_targets = similar(tdata, (2, len))
-	
-    llb, lub, lw = global_coordinates(llb)
-    rlb, rub, rw = global_coordinates(rlb)
+function local_coordinates(lub, rlb, s1, s2, lw, rw)
     # local coordinates:
-    __llb = _llb = 29 .- lw
-    __rlb = _rlb = 29 .- rw
-    __lub = __rub = _lub = _rub = (28, 28)
+    __llb = _llb = (s1, s2) .- lw .+ 1
+    __rlb = _rlb = (s1, s2) .- rw .+ 1
+    __lub = __rub = _lub = _rub = (s1, s2)
     ## for overlap:
     d = lub .- rlb
     has_overlap = false
@@ -108,13 +93,82 @@ function make_new_imgs(
         __llb = _lub .- d
         __rub = _rlb .+ d
     end
+    return has_overlap, _llb, _rlb, _lub, _rub, __llb, __rlb, __lub, __rub
+end
+
+inv_trans(_) = identity
+inv_trans(::typeof(rotr90)) = rotl90
+inv_trans(::typeof(rotl90)) = rotr90
+
+predict_transformed_size(_, s1, s2) = (s1, s2) 
+predict_transformed_size(::typeof(rotr90), s1, s2) = (s2, s1) 
+predict_transformed_size(::typeof(rotl90), s1, s2) = (s2, s1) 
+
+# 1) create a working area of size `tmp_size`
+# 2) at projected lower bounds point `llb`:
+#    a) apply `drawing_transformation` to left image
+#    b) place its lower left corner at `llb`
+#    Do the Same for `rlb`.
+# 3) When the new image is finished:
+#    a) resize it to `newimg_size`
+#    b) apply reverse transformation
+function make_new_imgs(
+    fshape, fdata, tdata; 
+    llb::Union{Symbol, Nothing, NTuple{2,<:Integer}}=nothing,
+    rlb::Union{Symbol, Nothing, NTuple{2,<:Integer}}=nothing,
+    newimg_size::Union{Nothing, NTuple{2,<:Integer}}=nothing,
+    tmp_size::Union{Nothing, NTuple{2,<:Integer}}=nothing,
+    drawing_transformation::Union{typeof(identity), typeof(rotr90), typeof(rotl90)}=rotl90
+)
+    rng = seed!(31415)      # reproducibly choose RHS image
     
+    #fdata = fdata[1:15,:,:]
+    #fshape = reverse(size(fdata))
+
+    dims = length(fshape)
+    @assert dims == 3
+    @assert all(size(fdata) .== reverse(fshape))
+
+    len, _s2, _s1 = Int.(fshape)
+    rot = drawing_transformation
+    unrot = inv_trans(rot)
+
+    # `(s1,s2)` is the size of a rotated original image
+    s1, s2 = predict_transformed_size(rot, _s1, _s2)
+
+    # llb = (1,1), rlb=(7,7), tmp_size=(36,36) is used by Sener & Koltun
+    if isnothing(llb) || llb isa Symbol
+        llb = (1,1)
+    end
+    if isnothing(rlb) || rlb isa Symbol
+        rlb = (7,7)
+    end
+    if isnothing(newimg_size)
+        newimg_size = (s1, s2)
+    end
+    if isnothing(tmp_size) || tmp_size isa Symbol
+        tmp_size = newimg_size .+ 8
+    end
+    @assert all(rlb .>= llb)
+
+    # `empty_new` is a template for the drawing area
+    empty_new = zeros(eltype(fdata), tmp_size) # empty_new = unrot(zeros(eltype(fdata), tmp_size))
+   	S1, S2 = size(empty_new)
+    llb, lub, lw = global_coordinates(llb; local_img_size=(s1, s2), new_img_size=(S1, S2))
+    rlb, rub, rw = global_coordinates(rlb; local_img_size=(s1, s2), new_img_size=(S1, S2))
+
+    has_overlap, _llb, _rlb, _lub, _rub, __llb, __rlb, __lub, __rub = local_coordinates(lub, rlb, s1, s2, lw, rw)
+
+    new_imgs = similar(fdata, predict_transformed_size(unrot, newimg_size...)..., len)
+    new_targets = similar(tdata, (2, len))
+
     for ileft = 1:len
 		iright = rand(rng, 1:len)    # choose random index for right feature img
-		img_left = fdata[:,:,ileft]
-		img_right = fdata[:,:,iright]
-		img_new = zeros(eltype(img_left), tmpsize[1], tmpsize[2])
-	    # the pixel `img_new[llb[1], llb[2]]` will have value `img_left[_llb[1], _llb[1]]`
+		img_left = rot(fdata[:,:,ileft])
+		img_right = rot(fdata[:,:,iright])
+		img_new = copy(empty_new)
+	    
+        # the pixel `img_new[llb[1], llb[2]]` will have value `img_left[_llb[1], _llb[1]]`
         # likewise, `img_new[llb[1]:lub[1], llb[2]:lub[2]]` have values `img_left[_llb[1]:_lub[1], _llb[1]:_lub[2]]`
         # same for RHS
         img_new[llb[1]:lub[1], llb[2]:lub[2]] .= img_left[_llb[1]:_lub[1], _llb[2]:_lub[2]]
@@ -128,12 +182,12 @@ function make_new_imgs(
             )
         end
 
-        new_imgs[:, :, ileft] .= imresize(img_new, (28,28); method=Constant()) # nearest neighbor "interpolation"
+        new_imgs[:, :, ileft] .= unrot(imresize(img_new, newimg_size; method=Constant())) # nearest neighbor "interpolation"
 
         new_targets[1, ileft] = tdata[ileft]
         new_targets[2, ileft] = tdata[iright]
 	end
-
+    
     return new_imgs, new_targets
 end
 
@@ -157,8 +211,7 @@ function generate_multi_data(
     tbytes, theader, tdata = read_and_parse(tpath)
 
     # generate multi-feature image data
-    len = first(fheader.shape)
-    new_imgs, new_targets = make_new_imgs(len, fdata, tdata; kwargs...)
+    new_imgs, new_targets = make_new_imgs(fheader.shape, fdata, tdata; kwargs...)
 
     foutpath = isnothing(features_outpath) ? default_multi_path(fpath) : features_outpath
     toutpath = isnothing(targets_outpath) ? default_multi_path(tpath) : targets_outpath
@@ -226,7 +279,8 @@ function MultiMNIST(
     mnist_dat::MNIST; 
     features_outpath=nothing, targets_outpath=nothing,
     llb::Union{Symbol, Nothing, NTuple{2, <:Integer}}=nothing, 
-    rlb::Union{Symbol, Nothing, NTuple{2, <:Integer}}=nothing, 
+    rlb::Union{Symbol, Nothing, NTuple{2, <:Integer}}=nothing,
+    kwargs...
 )
     fpath = mnist_dat.metadata["features_path"]
 	tpath = mnist_dat.metadata["targets_path"]
@@ -242,7 +296,7 @@ function MultiMNIST(
             fpath, tpath;
             features_outpath = multi_fpath,
             targets_outpath = multi_tpath,
-            llb, rlb
+            llb, rlb, kwargs...
         )
     else
         _, _, new_imgs = read_and_parse(multi_fpath)
