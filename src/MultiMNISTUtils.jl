@@ -6,7 +6,7 @@ import MLDatasets: MNIST, SupervisedDataset
 import Interpolations: Constant
 import GZip
 import ImageTransformations: imresize
-import Random: seed!, randperm
+import Random: Xoshiro
 
 # For a description of the "IDX" file format, see 
 # http://yann.lecun.com/exdb/mnist/
@@ -120,7 +120,7 @@ function make_new_imgs(
     tmp_size::Union{Nothing, NTuple{2,<:Integer}}=nothing,
     drawing_transformation::Union{typeof(identity), typeof(rotr90), typeof(rotl90)}=rotl90
 )
-    rng = seed!(31415)      # reproducibly choose RHS image
+    rng = Xoshiro(31415)      # reproducibly choose RHS image
     
     #fdata = fdata[1:15,:,:]
     #fshape = reverse(size(fdata))
