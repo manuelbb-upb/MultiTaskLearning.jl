@@ -38,7 +38,7 @@ function LRModel(;imgsize=(28,28,1), nclasses=10)
         Dropout(0.5f0, 1f0, :),
         Dense(50 => nclasses),
         #(x, ps, st) -> (logsoftmax(x), st), # does not work
-        Lux.WrappedFunction(logsoftmax) # TODO remove and use logit-loss
+        # Lux.WrappedFunction(logsoftmax) # TODO remove and use logit-loss
     )
     return LRModel(mod_base, mod_task, mod_task)
 end
