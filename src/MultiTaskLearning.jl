@@ -4,15 +4,29 @@ import MLDatasets: MNIST
 
 include("MultiMNISTUtils.jl")
 import .MultiMNISTUtils: MultiMNIST
-export MultiMNIST
 
 import Lux
-import Lux: Chain, Conv, MaxPool, Dense, FlattenLayer, Dropout
-import Lux: relu, logsoftmax
+import Lux: Chain, Conv, MaxPool, Dense, FlattenLayer, Dropout, 
+    AbstractExplicitContainerLayer
+import Lux: relu
 
-import OneHotArrays: onehotbatch
+export MultiMNIST, LRModel, multidir, FWConfig
 
-struct LRModel{B,L,R} <: Lux.AbstractExplicitContainerLayer{(:base, :l, :r)}
+abstract type AbstractMultiDirConfig end
+
+"Given the Jacobian `Df` and a configuration `cfg::AbstractMultiDirConfig`, compute the 
+steepest descent direction."
+function multidir(Df::AbstractMatrix, cfg::AbstractMultiDirConfig)
+    @error "`multidir` is not yet implemented."
+end
+
+include("multidir_frank_wolfe.jl")
+const DEFAULT_MULTIDIR_CFG = FWConfig()
+
+"Given the Jacobian `Df`, compute the steepest descent direction using default settings."
+multidir(Df::AbstractMatrix) = multidir(Df, DEFAULT_MULTIDIR_CFG)
+
+struct LRModel{B,L,R} <: AbstractExplicitContainerLayer{(:base, :l, :r)}
     base :: B
     l :: L
     r :: R
@@ -50,5 +64,13 @@ function (model::LRModel)(x::AbstractArray, ps, st::NamedTuple)
     return (y_l, y_r), (base = st_base, l = st_l, r = st_r)
 end
 
-export LRModel
+# Optionally glued code
+import Requires: @require
+function __init__()
+    @require JuMP="4076af6c-e467-56ae-b986-b466b2749572" begin
+        include("multidir_jump.jl")
+        @require COSMO="1e616198-aa4e-51ec-90a2-23f7fbd31d8d" include("multidir_cosmo.jl")
+    end
+end
+
 end # module MultiTaskLearning

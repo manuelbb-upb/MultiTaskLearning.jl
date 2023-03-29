@@ -1,0 +1,10 @@
+[deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+ComponentArrays = "b0b7db55-cfe3-40fc-9ded-d10e2dbeff66"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MLUtils = "f1d291b0-491e-4a28-83b9-f70985020b54"
+MultiTaskLearning = "810ba223-6144-4a35-b8e7-63c5f44b795a"
+OneHotArrays = "0b1bfda6-eb8a-41d2-88d8-f5af5cad476f"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
+Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
