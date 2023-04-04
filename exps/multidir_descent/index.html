@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Two-Task Learning with a Spcial LeNet · MultiTaskLearning</title><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.045/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.24/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">MultiTaskLearning</a></span></div><form class="docs-search" action="../../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../../">MultiTaskLearning.jl</a></li><li class="is-active"><a class="tocitem" href>Two-Task Learning with a Spcial LeNet</a><ul class="internal"><li><a class="tocitem" href="#Data-Loading-and-Pre-Processing"><span>Data Loading and Pre-Processing</span></a></li><li><a class="tocitem" href="#Setting-up-the-Neural-Network."><span>Setting up the Neural Network.</span></a></li><li><a class="tocitem" href="#Loss-and-Gradients"><span>Loss &amp; Gradients</span></a></li><li><a class="tocitem" href="#Partial-Multi-Descent"><span>Partial Multi-Descent</span></a></li><li><a class="tocitem" href="#Structured-Gradients:"><span>Structured Gradients:</span></a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Two-Task Learning with a Spcial LeNet</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Two-Task Learning with a Spcial LeNet</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/manuelbb-upb/MultiTaskLearning.jl/blob/main/docs/src/exps/multidir_descent.md" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Two-Task-Learning-with-a-Spcial-LeNet"><a class="docs-heading-anchor" href="#Two-Task-Learning-with-a-Spcial-LeNet">Two-Task Learning with a Spcial LeNet</a><a id="Two-Task-Learning-with-a-Spcial-LeNet-1"></a><a class="docs-heading-anchor-permalink" href="#Two-Task-Learning-with-a-Spcial-LeNet" title="Permalink"></a></h1><p>This sript demonstrates how to apply</p><ul><li>standard multi-objective steepest descent and</li><li>“partial” steepest descent</li></ul><p>to a classification problem with two objectives. In fact, we want to reproduce the results from <sup class="footnote-reference"><a id="citeref-1" href="#footnote-1">[1]</a></sup>.</p><h2 id="Data-Loading-and-Pre-Processing"><a class="docs-heading-anchor" href="#Data-Loading-and-Pre-Processing">Data Loading and Pre-Processing</a><a id="Data-Loading-and-Pre-Processing-1"></a><a class="docs-heading-anchor-permalink" href="#Data-Loading-and-Pre-Processing" title="Permalink"></a></h2><p>For that, we load a special MNIST Dataset:</p><pre><code class="language-julia hljs">import MultiTaskLearning: MultiMNIST</code></pre><p>For plotting, let&#39;s simply use <code>UnicodePlots</code>.</p><pre><code class="language-julia hljs">import UnicodePlots: heatmap</code></pre><p>Before visually inspecting the dataset, we would like to have it in the right format already. We use <code>DataLoader</code> for iteration and one-hot encoding for the labels:</p><pre><code class="language-julia hljs">import MLUtils: DataLoader
+import OneHotArrays: onehotbatch, onecold</code></pre><p>The following helper function loads the data and puts everything in order:</p><pre><code class="language-julia hljs">function load_multi_mnist(mode=:train; batchsize=-1, shuffle=true, data_percentage=0.1)
+    if mode != :train mode = :test end
+
+    mmnist = MultiMNIST(Float32, mode)
+
+    last_index = min(length(mmnist), floor(Int, length(mmnist)*data_percentage))
+    imgs, _labels = mmnist[1:last_index];# _labels[:,i] is a vector with two labels for sample i
+    labels = onehotbatch(_labels, 0:9)   # labels[:,:,i] is a matrix, labels[:, 1, i] is the one hot vector of the first label, labels[:,2,i] is for the second label
+    sx, sy, num_dat = size(imgs)
+
+    # reshape for convolutional layer, it wants an additional dimension:
+    X = reshape(imgs, sx, sy, 1, num_dat)
+    return DataLoader(
+        (features=X, labels=(llabels=labels[:,1,:], rlabels=labels[:,2,:]));
+        shuffle, batchsize=batchsize &gt; 0 ? min(batchsize,num_dat) : num_dat
+    )
+end</code></pre><p>If <code>dat</code> is a DataLoader returned by <code>load_multi_mnist</code>, then we can access the features of a batch with the <code>features.property</code>. For a single sample, this is an matrix, but for a batch its a multi-dimensional array, where the last index iterates samples. That&#39;s why we also define the following plotting helpers. The first one is for a single sample:</p><pre><code class="language-julia hljs">function plot_mnist(
+    mat::AbstractMatrix, labels::Union{AbstractVector, Nothing}=nothing
+)
+    additional_settings = Dict()
+    if !isnothing(labels)
+        additional_settings[:title] = &quot;$(labels)&quot;
+    end
+    return heatmap(
+        mat&#39;; yflip=true, colorbar=false, colormap=:grays, additional_settings...
+    )
+end</code></pre><p>And the second plotting function acts on a batch with extended dimensions. <code>i</code> is the sample index within the batch.</p><pre><code class="language-julia hljs">function plot_mnist(
+    arr::AbstractArray{&lt;:Real, 4}, Y::Union{NamedTuple, Nothing} = nothing;
+    i=1
+)
+    @assert size(arr, 3) == 1
+    @assert isnothing(Y) || (haskey(Y, :llabels) &amp;&amp; haskey(Y, :rlabels))
+    if !isnothing(Y)
+        Yl = onecold(Y.llabels[:,i], 0:9)
+        Yr = onecold(Y.rlabels[:,i], 0:9)
+        Y = [Yl, Yr]
+    end
+    plot_mnist(arr[:,:,1,i], Y)
+end</code></pre><p>(This function is kept for historic reasons, but not needed with DataLoader) #hide</p><p>Let&#39;s finally have a look into the dataset:</p><pre><code class="language-julia hljs">dat = load_multi_mnist(;batchsize=64);
+X, Y = first(dat); # extract first batch
+plot_mnist(X, Y)</code></pre><h2 id="Setting-up-the-Neural-Network."><a class="docs-heading-anchor" href="#Setting-up-the-Neural-Network.">Setting up the Neural Network.</a><a id="Setting-up-the-Neural-Network.-1"></a><a class="docs-heading-anchor-permalink" href="#Setting-up-the-Neural-Network." title="Permalink"></a></h2><p>To work with this specific data we can use the custom “Left-Right-Model” from the <code>MultiTaskLearning</code> package. It is a two-output LeNet architecture with some shared parameters for both outputs.</p><pre><code class="language-julia hljs">import MultiTaskLearning: LRModel</code></pre><p>To set it up, we also need the <code>Random</code> module and <code>Lux</code>. <code>Lux</code> can either be added as a dependency to the environment or imported from <code>MultiTaskLearning</code>.</p><pre><code class="language-julia hljs">import Random
+import MultiTaskLearning: Lux</code></pre><p>We can now initialize a model and its parameters and states:</p><pre><code class="language-julia hljs">rng = Random.seed!(31415)   # reproducible pseudo-random numbers
+# Initialize ann with shared parameters
+nn = LRModel();
+ps, st = Lux.setup(rng, nn);    # parameters and states</code></pre><h2 id="Loss-and-Gradients"><a class="docs-heading-anchor" href="#Loss-and-Gradients">Loss &amp; Gradients</a><a id="Loss-and-Gradients-1"></a><a class="docs-heading-anchor-permalink" href="#Loss-and-Gradients" title="Permalink"></a></h2><p>We offer the <code>multidir</code> function to compute the multi-objective steepest descent direction from a jacobian matrix:</p><pre><code class="language-julia hljs">import MultiTaskLearning: multidir</code></pre><p>The <code>multidir</code> function should work well with <code>ComponentArray</code>s, which allow for indexing the derivatives by the parameter names of the model.</p><pre><code class="language-julia hljs">import ComponentArrays: ComponentArray, getaxes, Axis</code></pre><p>Of course, we also need some way of computing the loss derivatives, and we can use Zygote for this:</p><pre><code class="language-julia hljs">import Zygote: withgradient, withjacobian, pullback, jacobian
+# optional: skip certain parts of code in gradient computation:
+import ChainRulesCore: @ignore_derivatives, ignore_derivatives</code></pre><h3 id="Loss-Function(s)"><a class="docs-heading-anchor" href="#Loss-Function(s)">Loss Function(s)</a><a id="Loss-Function(s)-1"></a><a class="docs-heading-anchor-permalink" href="#Loss-Function(s)" title="Permalink"></a></h3><p>As ist customary with classification, we use logit-crossentropy, handcrafted from optimized functions in <code>Lux</code>:</p><pre><code class="language-julia hljs">logitcrossentropy(y_pred, y) = Lux.mean(-sum(y .* Lux.logsoftmax(y_pred); dims=1))</code></pre><p>For best performance (<code>LRModel</code> does not cache (yet)), we&#39;d like to have the loss for the left and right classification in one go. <code>compute_losses</code> does this and also returns the new network states, to suit a typical <code>Lux</code> workflow:</p><pre><code class="language-julia hljs">function compute_losses(nn, ps, st, X, Y)
+    Y_pred, _st = Lux.apply(nn, X, ps, st)
+    losses = [
+        logitcrossentropy(Y_pred[1], Y.llabels);
+        logitcrossentropy(Y_pred[2], Y.rlabels)
+    ]
+    return losses, _st
+end</code></pre><h3 id="Testing-Things"><a class="docs-heading-anchor" href="#Testing-Things">Testing Things</a><a id="Testing-Things-1"></a><a class="docs-heading-anchor-permalink" href="#Testing-Things" title="Permalink"></a></h3><p>We can now already most things on the first batch. The only thing left to do is wrapping the parameters as a <code>ComponentVector</code>.</p><pre><code class="language-julia hljs">ps_c = ComponentArray(ps);</code></pre><p>Now, the initial derivative computation will take some time. Take note, that the Zygote methods return tuples, so we additionally pipe to <code>first</code> to get a matrix:</p><pre><code class="language-julia hljs">jac = jacobian(params -&gt; first(compute_losses(nn, params, st, X, Y)), ps_c) |&gt; first;
+dir = multidir(jac)
+new_ps_c = ps_c .+ dir</code></pre><h3 id="Training-Functions"><a class="docs-heading-anchor" href="#Training-Functions">Training Functions</a><a id="Training-Functions-1"></a><a class="docs-heading-anchor-permalink" href="#Training-Functions" title="Permalink"></a></h3><p>Of course, for training we put this into functions. <code>mode</code> is a value reference to distinguish different strategies on dispatch level.</p><pre><code class="language-julia hljs">import LinearAlgebra as LA
+function losses_states_jac(nn, ps_c, st, X, Y, mode=Val(:standard)::Val{:standard}; norm_grads=false)
+    local new_st
+    losses, jac_t = withjacobian(ps_c) do params
+        losses, new_st = compute_losses(nn, params, st, X, Y)
+        losses
+    end
+    jac = only(jac_t)
+    if norm_grads
+        jac ./= LA.norm.(eachrow(jac))
+    end
+    return losses, new_st, jac
+end
+
+function apply_multidir(
+    nn, ps_c, st, X, Y, mode=Val(:full)::Val{:standard};
+    lr=Float32(1e-3), jacmode=:standard, norm_grads=false
+)
+    losses, new_st, jac = losses_states_jac(nn, ps_c, st, X, Y, Val(jacmode); norm_grads)
+    dir = multidir(jac)
+    return losses, ps_c .+ lr .* dir, new_st
+end</code></pre><p>In the main <code>train</code> function, mode becomes a keyword argument:</p><pre><code class="language-julia hljs">import Printf: @sprintf
+function train(
+    nn, ps_c, st, dat;
+    norm_grads=false,
+    dirmode=:full, jacmode=:standard, num_epochs=1, lr=Float32(1e-3)
+)
+    # printing offsets:
+    epad = ndigits(num_epochs)
+    num_batches = length(dat)
+    bpad = ndigits(num_batches)
+    # safeguard learning type
+    lr = eltype(ps_c)(lr)
+    # training loop
+    for e_ind in 1:num_epochs
+        @info &quot;----------- Epoch $(lpad(e_ind, epad)) ------------&quot;
+        epoch_stats = @timed for (b_ind, (X, Y)) in enumerate(dat)
+            batch_stats = @timed begin
+                losses, ps_c, st = apply_multidir(nn, ps_c, st, X, Y, Val(dirmode); lr, jacmode, norm_grads)
+                # excuse this ugly info string, please...
+                @info &quot;\tE/B/Prog $(lpad(e_ind, epad)) / $(lpad(b_ind, bpad)) / $(@sprintf &quot;%3.2f&quot; b_ind/num_batches) %; l1 $(@sprintf &quot;%3.4f&quot; losses[1]); l2 $(@sprintf &quot;%3.4f&quot; losses[2])&quot;
+            end
+            @info &quot;\t\tBatch time: $(@sprintf &quot;%8.2f msecs&quot; batch_stats.time*1000).&quot;
+            if b_ind &gt;= 2
+                break
+            end
+        end
+        @info &quot;Epoch time: $(@sprintf &quot;%.2f secs&quot; epoch_stats.time)&quot;
+    end
+    return ps_c, st
+end
+
+ps_fin, st_fin = train(nn, ps_c, st, dat);</code></pre><h2 id="Partial-Multi-Descent"><a class="docs-heading-anchor" href="#Partial-Multi-Descent">Partial Multi-Descent</a><a id="Partial-Multi-Descent-1"></a><a class="docs-heading-anchor-permalink" href="#Partial-Multi-Descent" title="Permalink"></a></h2><p>In <sup class="footnote-reference"><a id="citeref-1" href="#footnote-1">[1]</a></sup>, the authors don&#39;t compute the multiobjective steepest descent direction with respect to all parameters, but only for the shared ones. Updates for the other parameters are performed with task-specific gradients:</p><pre><code class="language-julia hljs">function apply_multidir(
+    nn, ps_c, st, X, Y, mode::Val{:partial};
+    lr=Float32(1e-3), jacmode=:standard, norm_grads=false
+)
+    losses, new_st, jac = losses_states_jac(nn, ps_c, st, X, Y, Val(jacmode); norm_grads)
+    # turn `jac` into ComponentMatrix; this allows for **very** convenient indexing
+    # `jac_c[:l, :]` is the gradient for the first task, `jac_c[:r, :]` for the second task
+    # `jac_c[:l, :base]` is that part of the gradient corresponding to shared parameters
+    # `jac_c[:l, :l]` is that part of the gradient corresponding to task-specific parameters
+    ax = only(getaxes(ps_c))
+    jac_c = ComponentArray(jac, Axis(l=1, r=2), ax)
+
+    # for the task parameters, apply specific parts of gradients
+    new_ps_c = deepcopy(ps_c)
+    new_ps_c.l .-= lr .* jac_c[:l, :l]
+    new_ps_c.r .-= lr .* jac_c[:r, :r]
+
+    # compute multi-objective steepest descent direction w.r.t. **shared** parameters
+    d = multidir(jac_c[:, :base])   ## NOTE the sub-component-matrix behaves like a normal matrix and can be provided to the solver :)
+    # apply multi-dir to shared parameters in-place
+    new_ps_c.base .+= lr .* d
+    return losses, new_ps_c, new_st
+end</code></pre><p>To train with this direction, we can call <code>train(nn, ps_c, st, dat; dirmode=:partial)</code>.</p><h2 id="Structured-Gradients:"><a class="docs-heading-anchor" href="#Structured-Gradients:">Structured Gradients:</a><a id="Structured-Gradients:-1"></a><a class="docs-heading-anchor-permalink" href="#Structured-Gradients:" title="Permalink"></a></h2><p>We are wasting a bit of memory for zeros introduced by the model structure. Maybe, we can compute the gradients more effectively. <strong>This is a ToDo</strong></p><p>arXiv:1810.04650 [cs, stat], Jan. 2019, Accessed: Jan. 24, 2022. [Online]. Available: http://arxiv.org/abs/1810.04650</p><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p><section class="footnotes is-size-7"><ul><li class="footnote" id="footnote-1"><a class="tag is-link" href="#citeref-1">1</a>O. Sener and V. Koltun, “Multi-Task Learning as Multi-Objective Optimization,”</li></ul></section></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../">« MultiTaskLearning.jl</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.24 on <span class="colophon-date" title="Tuesday 4 April 2023 20:45">Tuesday 4 April 2023</span>. Using Julia version 1.6.7.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
