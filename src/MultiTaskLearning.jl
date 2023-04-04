@@ -14,17 +14,23 @@ export MultiMNIST, LRModel, multidir, FWConfig
 
 abstract type AbstractMultiDirConfig end
 
-"Given the Jacobian `Df` and a configuration `cfg::AbstractMultiDirConfig`, compute the 
+"Given the gradients `grads` and a configuration `cfg::AbstractMultiDirConfig`, compute the 
 steepest descent direction."
-function multidir(Df::AbstractMatrix, cfg::AbstractMultiDirConfig)
+multidir(grads, cfg::AbstractMultiDirConfig) = _multidir(grads, cfg)
+
+function _multidir(grads, cfg::AbstractMultiDirConfig)
     @error "`multidir` is not yet implemented."
+end
+
+function multidir(Df::AbstractMatrix, cfg::AbstractMultiDirConfig)
+    return _multidir(eachrow(Df), cfg)
 end
 
 include("multidir_frank_wolfe.jl")
 const DEFAULT_MULTIDIR_CFG = FWConfig()
 
 "Given the Jacobian `Df`, compute the steepest descent direction using default settings."
-multidir(Df::AbstractMatrix) = multidir(Df, DEFAULT_MULTIDIR_CFG)
+multidir(Df) = multidir(Df, DEFAULT_MULTIDIR_CFG)
 
 struct LRModel{B,L,R} <: AbstractExplicitContainerLayer{(:base, :l, :r)}
     base :: B
@@ -60,7 +66,7 @@ end
 function (model::LRModel)(x::AbstractArray, ps, st::NamedTuple)
     z, st_base = model.base(x, ps.base, st.base)
     y_l, st_l = model.l(z, ps.l, st.l)
-    y_r, st_r = model.l(z, ps.r, st.r)
+    y_r, st_r = model.r(z, ps.r, st.r)
     return (y_l, y_r), (base = st_base, l = st_l, r = st_r)
 end
 

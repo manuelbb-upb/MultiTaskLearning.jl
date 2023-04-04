@@ -4,7 +4,11 @@ using MultiTaskLearning
 makedocs(
     sitename = "MultiTaskLearning",
     format = Documenter.HTML(),
-    modules = [MultiTaskLearning]
+    modules = [MultiTaskLearning],
+    pages = [
+        "index.md",
+        "exps/multidir_descent.md"
+    ]
 )
 
 # Documenter can also automatically deploy documentation to gh-pages.

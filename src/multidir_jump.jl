@@ -6,7 +6,7 @@ export JuMPConfig
 abstract type AbstractJuMPConfig<:AbstractMultiDirConfig end
 
 Base.@kwdef struct JuMPConfig{S<:MOI.AbstractOptimizer} <: AbstractJuMPConfig
-    solver :: S
+    solver :: Type{S}
     target :: Symbol = :dual
     verbose :: Bool = false
     attributes :: Dict{String, Any} = Dict{String, Any}()
@@ -23,12 +23,12 @@ function setup_jump_problem(cfg :: JuMPConfig)
     return opt
 end
 
-function multidir(Df::AbstractMatrix, cfg::JuMPConfig)
+function _multidir(grads, cfg::JuMPConfig)
     opt = setup_jump_problem(cfg)
     if cfg.target == :dual
-        return jump_multidir_dual(opt, Df)
+        return jump_multidir_dual(opt, grads)
     elseif cfg.target == :primal
-        return jump_multidir_primal(opt, Df)
+        return jump_multidir_primal(opt, grads)
     else
         @error "Unknown target `$(cfg.target)`. Must be `:primal` or `:dual`."
     end
@@ -37,14 +37,14 @@ end
 @doc raw"""
 Return a convex combination of negative gradients by solving the dual problem
 ```math
-\min_{α ∈ ℝᴷ, α >= 0} ‖ -Dfᵀ ⋅ α ‖²
+\min_{α ∈ ℝᴷ, α ≥ 0} ‖ -Dfᵀ ⋅ α ‖²
 ```
 """
-function jump_multidir_dual(opt, Df)
-    num_objfs, num_vars = size(Df)
+function jump_multidir_dual(opt, grads)
+    num_objfs = length(grads)
 
     @variable(opt, α[1:num_objfs] .>= 0)
-    @expression(opt, d, -Df'α)
+    @expression(opt, d, -sum(α .* grads) )
     @objective(opt, Min, sum(d.^2))
     @constraint(opt, sum(α) == 1)
 
@@ -58,14 +58,16 @@ Return the minimizer of the primal problem
 \min_{d ∈ ℝⁿ} \maxₖ (Df ⋅ d)ₖ + ½ ‖d‖²
 ```
 """
-function jump_multidir_primal(opt, Df)
-    num_objfs, num_vars = size(Df)
+function jump_multidir_primal(opt, grads)
+    num_vars = length(first(grads))
 
     @variable(opt, β)
     @variable(opt, d[1:num_vars])
 
     @objective(opt, Min, β + 0.5 * sum(d.^2))
-    @constraint(opt, Df*d .<= β)
+    for g in grads
+        @constraint(opt, g'd <= β)
+    end
 
     optimize!(opt)
 

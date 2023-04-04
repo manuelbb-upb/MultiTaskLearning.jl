@@ -80,20 +80,23 @@ function min_chull2(M, v, u)
     return min_quad(a,b,c)
 end
 
-function frank_wolfe_multidir_dual(Df::AbstractMatrix{R}; max_iter=10_000, eps_abs=1e-5) where R<:Real
-    num_objfs, num_vars = size(Df)
-  	T = Base.promote_type(Float32, R)
-
+function frank_wolfe_multidir_dual(
+    grads#::AbstractVector{<:AbstractVector}
+    ; 
+    max_iter=10_000, eps_abs=1e-5
+)
+    num_objfs = length(grads)
+    T = Base.promote_type(Float32, mapreduce(eltype, promote_type, grads))
+    
     ## 1) Initialize ``α`` vector. There are smarter ways to do this...
     α = fill(T(1/num_objfs), num_objfs)
 
     ## 2) Build symmetric matrix of gradient-gradient products
-    ### `_M` will be a temporary, upper triangular matrix 
+    ### `_M` will be a temporary, upper triangular matrix
 	_M = zeros(T, num_objfs, num_objfs)
-	for i = 1:num_objfs
-        gi = Df[i, :]
-		for j = i:num_objfs
-            gj = Df[j,:]
+	for (i,gi) = enumerate(grads)
+		for (j, gj) = enumerate(grads)
+            j<i && continue
 			_M[i,j] = gi'gj
 		end
 	end
@@ -118,8 +121,9 @@ function frank_wolfe_multidir_dual(Df::AbstractMatrix{R}; max_iter=10_000, eps_a
         end
         _α .= α
     end
-
-    return -Df'α    
+    
+    #return -sum(α .* grads) # somehow, broadcasting leads to type instability here, see also https://discourse.julialang.org/t/type-stability-issues-when-broadcasting/92715
+    return mapreduce(*, sum, α, grads)
 end
 
 Base.@kwdef struct FWConfig <: AbstractMultiDirConfig
@@ -127,6 +131,6 @@ Base.@kwdef struct FWConfig <: AbstractMultiDirConfig
     eps_abs :: Float64 = 1e-5
 end
 
-function multidir(Df::AbstractMatrix, cfg::FWConfig)
-    return frank_wolfe_multidir_dual(Df; max_iter=cfg.max_iter, eps_abs=cfg.eps_abs)
+function _multidir(grads, cfg::FWConfig)
+    return frank_wolfe_multidir_dual(grads; max_iter=cfg.max_iter, eps_abs=cfg.eps_abs)
 end

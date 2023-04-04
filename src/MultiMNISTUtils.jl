@@ -2,7 +2,7 @@ module MultiMNISTUtils
 
 export MultiMNIST
 
-import MLDatasets: MNIST, SupervisedDataset, bytes_to_type, MNISTReader
+import MLDatasets: datafile, MNIST, SupervisedDataset, bytes_to_type, MNISTReader
 import Interpolations: Constant
 import GZip
 import ImageTransformations: imresize
@@ -295,6 +295,34 @@ function MultiMNIST(FT::Type, split::Symbol, features_path, targets_path)
         targets
     )
 end
+
+function MultiMNIST(FT::Type, split::Symbol; dir=nothing, force_recreate::Bool=false)
+    @assert split in [:train, :test]
+    if split === :train
+        IMAGESPATH = "train-images-idx3-ubyte.gz"
+        LABELSPATH = "train-labels-idx1-ubyte.gz"
+    else
+        IMAGESPATH = "t10k-images-idx3-ubyte.gz"
+        LABELSPATH = "t10k-labels-idx1-ubyte.gz"
+    end
+    features_path = datafile("MNIST", IMAGESPATH, dir)
+    targets_path = datafile("MNIST", LABELSPATH, dir)
+    multi_fpath = default_multi_path(features_path)
+    multi_tpath = default_multi_path(targets_path)
+
+    if !force_recreate && isfile(multi_fpath) && isfile(multi_tpath)
+        return MultiMNIST(FT, split, multi_fpath, multi_tpath)
+    end
+
+    multi_features, multi_targets = generate_multi_data(fpath, tpath; kwargs...)
+    multi_fpath, multi_tpath = write_idx_files(multi_features, multi_targets, multi_fpath, multi_tpath)
+
+    return MultiMNIST(FT, split, multi_fpath, multi_tpath)
+end
+
+MultiMNIST(; split = :train, Tx = Float32, dir = nothing) = MultiMNIST(Tx, split; dir)
+MultiMNIST(split::Symbol; kws...) = MultiMNIST(; split, kws...)
+MultiMNIST(Tx::Type; kws...) = MultiMNIST(; Tx, kws...)
 
 function MultiMNIST(mnist;
     force_recreate::Bool=false, features_outpath=nothing, targets_outpath=nothing, kwargs...
