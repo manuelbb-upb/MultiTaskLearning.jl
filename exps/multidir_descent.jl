@@ -137,7 +137,7 @@ function compute_losses(nn, ps, st, X, Y)
         logitcrossentropy(Y_pred[2], Y.rlabels)
     ]
     return losses, _st
-end
+end 
 
 # ### Testing Things
 # We can now already most things on the first batch.

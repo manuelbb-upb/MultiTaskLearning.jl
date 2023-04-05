@@ -3,7 +3,7 @@ using MultiTaskLearning
 
 makedocs(
     sitename = "MultiTaskLearning",
-    format = Documenter.HTML(),
+    format = Documenter.HTML(ansicolor = true),
     modules = [MultiTaskLearning],
     pages = [
         "index.md",
