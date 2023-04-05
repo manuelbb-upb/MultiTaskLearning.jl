@@ -77,7 +77,7 @@ function plot_mnist(
     plot_mnist(arr[:,:,1,i], Y)
 end
 
-# (This function is kept for historic reasons, but not needed with DataLoader) #hide
+# (This function is kept for historic reasons, but not needed with DataLoader) #src
 function plot_mnist( #hide
     arr::AbstractArray{<:Real, 3}, Y::Union{AbstractMatrix, Nothing}=nothing; i=1 #hide
 )#hide

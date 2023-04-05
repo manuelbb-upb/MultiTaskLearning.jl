@@ -123,7 +123,7 @@ function frank_wolfe_multidir_dual(
     end
     
     #return -sum(α .* grads) # somehow, broadcasting leads to type instability here, see also https://discourse.julialang.org/t/type-stability-issues-when-broadcasting/92715
-    return mapreduce(*, sum, α, grads)
+    return mapreduce(*, +, α, grads)
 end
 
 Base.@kwdef struct FWConfig <: AbstractMultiDirConfig
