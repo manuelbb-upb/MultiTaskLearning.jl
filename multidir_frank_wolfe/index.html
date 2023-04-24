@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Custom Frank-Wolfe Solver... · MultiTaskLearning</title><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.045/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.24/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MultiTaskLearning</a></span></div><form class="docs-search" action="../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../">MultiTaskLearning.jl</a></li><li class="is-active"><a class="tocitem" href>Custom Frank-Wolfe Solver...</a><ul class="internal"><li><a class="tocitem" href="#Finding-the-Stepsize"><span>Finding the Stepsize</span></a></li><li><a class="tocitem" href="#Completed-Algorithm"><span>Completed Algorithm</span></a></li></ul></li><li><a class="tocitem" href="../exps/multidir_descent/">Two-Task Learning with a Special LeNet</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Custom Frank-Wolfe Solver...</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Custom Frank-Wolfe Solver...</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/manuelbb-upb/MultiTaskLearning.jl/blob/main/src/multidir_frank_wolfe.jl" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Custom-Frank-Wolfe-Solver..."><a class="docs-heading-anchor" href="#Custom-Frank-Wolfe-Solver...">Custom Frank-Wolfe Solver...</a><a id="Custom-Frank-Wolfe-Solver...-1"></a><a class="docs-heading-anchor-permalink" href="#Custom-Frank-Wolfe-Solver..." title="Permalink"></a></h1><p>... to compute the multi-objective steepest descent direction cheaply. For unconstrained problems, the direction can be computed by projecting <span>$\symbf{0}\in ℝ^n$</span> onto the convex hull of the negative objective gradients. This can be done easily with <code>JuMP</code> and a suitable solver (e.g., <code>COSMO</code>).</p><p>In “Multi-Task Learning as Multi-Objective Optimization” by Sener &amp; Koltun, the authors employ a variant of the Frank-Wolfe-type algorithms defined in “Revisiting Frank-Wolfe: Projection-Free Sparse Convex Optimization” by Jaggi.</p><p>The objective for the projection problem is</p><p class="math-container">\[F(\symbf{α})
+= \frac{1}{2} ‖ \sum_{i=1}^K αᵢ ∇fᵢ ‖_2^2
+= \frac{1}{2} ‖ \nabla \symbf{f}^T \symbf{α} ‖_2^2
+= \frac{1}{2} \symbf a^T \nabla \symbf{f} \nabla \symbf{f}^T \symbf {α}\]</p><p>Hence,</p><p class="math-container">\[\nabla F(\symbf{α})
+= \nabla \symbf{f} \nabla \symbf{f}^T \symbf α
+=: \symbf M \symbf α\]</p><p>The algorithm starts with some initial <span>$\symbf{α} = [α_1, …, α_K]^T$</span> and optimizes <span>$F$</span> within the standard simplex <span>$S = \{\symbf α = [α_1, …, α_k]: α_i \ge 0, \sum_i α_i = 1\}.$</span> This leads to the following procedure:</p><ol><li>Compute seed <span>$s$</span> as the minimizer of <span>$\langle \symbf s, \nabla F(\symbf α_k) \rangle = \langle \symbf s, \symbf M \symbf α_k\rangle$</span> in <span>$S$</span>. The minimum is attained in one of the corners, i.e., <span>$\symbf s = \symbf e_t$</span>, where <span>$t$</span> is the minimizing index for the entries of <span>$\symbf M \symbf α_k$</span>.</li><li>Compute the exact stepsize <span>$γ\in[0,1]$</span> that minimizes<p class="math-container">\[F((1-γ)\symbf α_k + γ \symbf s).\]</p></li><li>Set <span>$\symbf α_{k+1} = (1-γ_k) α_k + γ_k \symbf s$</span>.</li></ol><h2 id="Finding-the-Stepsize"><a class="docs-heading-anchor" href="#Finding-the-Stepsize">Finding the Stepsize</a><a id="Finding-the-Stepsize-1"></a><a class="docs-heading-anchor-permalink" href="#Finding-the-Stepsize" title="Permalink"></a></h2><p>Let&#39;s discuss step 2. Luckily, we can indeed (easily) compute the minimizing stepsize. Suppose <span>$\symbf v ∈ ℝⁿ$</span> and <span>$\symbf u ∈ ℝⁿ$</span> are vectors and <span>$\symbf M ∈ ℝ^{n×n}$</span> is a <strong>symmetric</strong> square matrix. What is the minimum of the following function?</p><p class="math-container">\[σ(γ) = ( (1-γ) \symbf v + γ \symbf u )ᵀ \symbf M ( (1-γ) \symbf v + γ \symbf u) \qquad  (γ ∈ [0,1])\]</p><p>We have</p><p class="math-container">\[σ(γ) \begin{aligned}[t]
+	&amp;=
+	( (1-γ) \symbf v + γ \symbf u )ᵀ\symbf{M} ( (1-γ) \symbf v + γ \symbf{u})
+		\\
+	&amp;=
+	(1-γ)² \underbrace{\symbf{v}ᵀ\symbf{M} \symbf{v}}_{a} +
+	  2γ(1-γ) \underbrace{\symbf{u}ᵀ\symbf{M} \symbf{v}}_{b} +
+	    γ² \underbrace{\symbf{u}ᵀ\symbf{M} \symbf{u}}_{c}
+		\\
+	&amp;=
+	(1 + γ² - 2γ)a + (2γ - 2γ²)b + γ² c
+		\\
+	&amp;=
+	(a -2b + c) γ² + 2 (b-a) γ + a
+\end{aligned}\]</p><p>The variables <span>$a, b$</span> and <span>$c$</span> are scalar. The boundary values are</p><p class="math-container">\[σ₀ = σ(0) = a \text{and} σ₁ = σ(1) = c.\]</p><p>If <span>$(a-2b+c) &gt; 0 ⇔ a-b &gt; b-c$</span>, then the parabola is convex and has its global minimum where the derivative is zero:</p><p class="math-container">\[2(a - 2b + c) y^* + 2(b-a) \stackrel{!}= 0
+ ⇔
+	γ^* = \frac{-2(b-a)}{2(a -2 b + c)}
+		= \frac{a-b}{(a-b)+(c-b)}\]</p><p>If <span>$a-b &lt; b -c$</span>, the parabola is concave and this is a maximum. The extremal value is</p><p class="math-container">\[σ_* = σ(γ^*)
+	= \frac{(a - b)^2}{(a-b)+(c-b)} - \frac{2(a-b)^2}{(a-b) + (c-b)} + a
+	= a - \frac{(a-b)^2}{(a-b) + (c-b)}\]</p><pre><code class="language-julia hljs">&quot;&quot;&quot;
+	min_quad(a,b,c)
+
+Given a quadratic function ``(a -2b + c) γ² + 2 (b-a) γ + a`` with ``γ ∈ [0,1]``, return
+`γ_opt` minimizing the function in that interval and its optimal value `σ_opt`.
+&quot;&quot;&quot;
+function min_quad(a,b,c)
+	a_min_b = a-b
+	b_min_c = b-c
+	if a_min_b &gt; b_min_c
+		# the function is a convex parabola and has its global minimum at `γ`
+		γ = a_min_b /(a_min_b - b_min_c)
+		if 0 &lt; γ &lt; 1
+			# if its in the interval, return it
+			σ = a - a_min_b * γ
+			return γ, σ
+		end
+	end
+	# the function is either a line or a concave parabola, the minimum is attained at the
+	# boundaries
+	if a &lt;= c
+		return 0, a
+	else
+		return 1, c
+	end
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Main.min_quad</code></pre><p>To use the above function in the Frank-Wolfe algorithm, we define a helper according to the definitions of <span>$a,b$</span> and <span>$c$</span>:</p><pre><code class="language-julia hljs">function min_chull2(M, v, u)
+	Mv = M*v
+	a = v&#39;Mv
+	b = u&#39;Mv
+	c = u&#39;M*u
+	return min_quad(a,b,c)
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">min_chull2 (generic function with 1 method)</code></pre><h2 id="Completed-Algorithm"><a class="docs-heading-anchor" href="#Completed-Algorithm">Completed Algorithm</a><a id="Completed-Algorithm-1"></a><a class="docs-heading-anchor-permalink" href="#Completed-Algorithm" title="Permalink"></a></h2><p>The stepsize computation is the most difficult part. Now, we only have to care about stopping and can complete the solver for our sub-problem:</p><pre><code class="language-julia hljs">import LinearAlgebra as LA</code></pre><pre><code class="language-julia hljs">function frank_wolfe_multidir_dual(grads; max_iter=10_000, eps_abs=1e-5)
+
+	num_objfs = length(grads)
+	T = Base.promote_type(Float32, mapreduce(eltype, promote_type, grads))
+
+	# 1) Initialize ``α`` vector. There are smarter ways to do this...
+	α = fill(T(1/num_objfs), num_objfs)
+
+	# 2) Build symmetric matrix of gradient-gradient products
+	# # `_M` will be a temporary, upper triangular matrix
+	_M = zeros(T, num_objfs, num_objfs)
+	for (i,gi) = enumerate(grads)
+		for (j, gj) = enumerate(grads)
+			j&lt;i &amp;&amp; continue
+			_M[i,j] = gi&#39;gj
+		end
+	end
+	# # mirror `_M` to get the full symmetric matrix
+	M = LA.Symmetric(_M, :U)
+
+	# 3) Solver iteration
+	_α = copy(α)    		# to keep track of change
+	u = zeros(T, num_objfs) # seed vector
+	for _=1:max_iter
+		t = argmin( M*α )
+		v = α
+		fill!(u, 0)
+		u[t] = one(T)
+
+		γ, _ = min_chull2(M, v, u)
+
+		α .*= (1-γ)
+		α[t] += γ
+
+		if sum( abs.( _α .- α ) ) &lt;= eps_abs
+			break
+		end
+		_α .= α
+	end
+
+	# return -sum(α .* grads) # somehow, broadcasting leads to type instability here,
+	# see also https://discourse.julialang.org/t/type-stability-issues-when-broadcasting/92715
+	return mapreduce(*, +, α, grads)
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">frank_wolfe_multidir_dual (generic function with 1 method)</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« MultiTaskLearning.jl</a><a class="docs-footer-nextpage" href="../exps/multidir_descent/">Two-Task Learning with a Special LeNet »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.24 on <span class="colophon-date" title="Monday 24 April 2023 16:00">Monday 24 April 2023</span>. Using Julia version 1.6.7.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
