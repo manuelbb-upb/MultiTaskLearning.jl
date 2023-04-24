@@ -1,10 +1,10 @@
 # This file is formatted to be parsed by "Literate.jl" #src
 
-# Activate the environment to make dependencies available #src
-using Pkg               #hide
-Pkg.activate(@__DIR__)  #hide
+# # Two-Task Learning with a Special LeNet
 
-# # Two-Task Learning with a Spcial LeNet
+# Activate the environment to make dependencies available:
+using Pkg               
+Pkg.activate(@__DIR__);
 
 # This sript demonstrates how to apply 
 # * standard multi-objective steepest descent and 

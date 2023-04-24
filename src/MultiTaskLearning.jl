@@ -27,6 +27,15 @@ function multidir(Df::AbstractMatrix, cfg::AbstractMultiDirConfig)
 end
 
 include("multidir_frank_wolfe.jl")
+Base.@kwdef struct FWConfig <: AbstractMultiDirConfig
+    max_iter :: Int = 10_000
+    eps_abs :: Float64 = 1e-5
+end
+
+function _multidir(grads, cfg::FWConfig)
+    return frank_wolfe_multidir_dual(grads; max_iter=cfg.max_iter, eps_abs=cfg.eps_abs)
+end
+
 const DEFAULT_MULTIDIR_CFG = FWConfig()
 
 "Given the Jacobian `Df`, compute the steepest descent direction using default settings."
